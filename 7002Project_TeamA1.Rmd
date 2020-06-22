@@ -1,0 +1,215 @@
+---
+title: "project_Q2"
+author: "7002_TeamA1"
+date: "12/1/2019"
+output: 
+  pdf_document:
+      toc: yes
+      toc_depth: '3'
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+if(!require('pacman')) {
+  install.packages('pacman')
+}
+pacman::p_load(glmnet, leaps, car, tidyverse, mapproj)
+library(pROC)
+library(psych) 
+library(dplyr)
+library(VIM)
+```
+
+\tableofcontents
+
+\pagebreak
+
+## 1.Data Pre-processing
+```{r}
+Train<-read.csv("bankrupt_train.csv",header=T)
+Test<-read.csv("bankrupt_test.csv",header=T)
+head(Train,5)
+head(Test,5)
+```
+
+### Check data imbalance
+```{r}
+y <- Train$class
+count0 <- 0
+count1 <- 0
+for(i in 1:6000){
+  if(y[i] == 1){
+    count1 <- count1 + 1
+  }
+  else{
+    count0 <- count0 + 1
+  }
+}
+
+barplot(c(count0,count1), width = c(0.1,0.1), names.arg = c(0,1), ylim = c(0,6000), xlab = "class of bankruptcy", ylab = "company number")
+```
+
+### Check missing value in train data
+```{r,warning=FALSE}
+Na_number<-c()
+for(i in 1:ncol(Train)){
+   num<-sum(is.na(Train[,i]))
+   Na_number<-c(Na_number,num)
+}
+Na_number
+na.ratio<-Na_number/nrow(Train)
+plot(na.ratio,type="l",col="red",xlab="Variable index",ylab="NA value ratio")
+aggr(Train[,2:65],prob=FALSE,numbers=TRUE)
+```
+
+### Check missing value in test data
+```{r,warning=FALSE}
+Na_number<-c()
+for(i in 1:ncol(Test)){
+   num<-sum(is.na(Test[,i]))
+   Na_number<-c(Na_number,num)
+}
+Na_number
+na.ratio<-Na_number/nrow(Test)
+plot(na.ratio,type="l",col="red",xlab="Variable index",ylab="NA value ratio")
+aggr(Test,prob=FALSE,numbers=TRUE)
+```
+
+### handle the missing data in train and test
+
+method:use the mean of the column value
+
+(1) handle the train data
+```{r}
+for(i in 1:ncol(Train)){
+  if(sum(is.na(Train[,i]))>0){
+  index<-which(is.na(Train[,i])==1)
+  Train[index,i]<-mean(Train[,i],na.rm=T)
+  }
+}
+aggr(Train,prob=FALSE,numbers=TRUE)
+```
+
+
+(2) handle the test data
+```{r}
+for(i in 1:ncol(Test)){
+  if(sum(is.na(Test[,i]))>0){
+  index<-which(is.na(Test[,i])==1)
+  Test[index,i]<-mean(Test[,i],na.rm=TRUE)
+  }
+}
+aggr(Test,prob=FALSE,numbers=TRUE)
+# head(Train)
+# head(Test)
+```
+
+## 2.Model Selection
+
+### scale the data set
+```{r}
+Train.scale <- scale(Train[,c(2:65)], center=TRUE, scale=TRUE)  #default
+Train.scale <- as.data.frame(Train.scale)  # set it back as a data frame
+Train.scale$class<-Train[,c(66)]
+head(Train.scale)
+```
+
+
+## 3.Visualization
+```{r}
+#install.packages("ggplot2")
+library(ggplot2)
+data_train<-Train.scale
+```
+
+```{r}
+df1 <- data.frame(
+  x <- unlist(data_train$Attr9),
+  y <- unlist(data_train$Attr24)
+)
+model1 <- lm(y ~ x,df1)
+plt1 <- ggplot(df1, aes(x = df1$x, y = df1$y)) + 
+  geom_point(shape = 20) +
+  ggtitle(paste('Correlation=',model1$coefficients[2]))+
+  xlab('Asset Turnover Ratio') + 
+  ylab('Gross Profitability Ratio')+
+  xlim(-0.03,0.05)+ylim(-0.75,0.75)+
+  geom_line(aes(y = fitted(model1)), colour='red')
+plt1
+```
+
+```{r}
+df2 <- data.frame(
+  x <- unlist(data_train$Attr9),
+  y <- unlist(data_train$Attr35)
+)
+model2 <- lm(y ~ x,df2)
+cor(df2)
+plt2 <- ggplot(df2, aes(x = df2$x, y = df2$y)) + 
+  geom_point(shape = 20) +
+  ggtitle(paste('Correlation=',model2$coefficients[2]))+
+  xlab('Asset Turnover Ratio') + 
+  ylab('Total Asset Turnover')+
+  xlim(-0.02,0.03)+ylim(-0.1,0.2)+
+  geom_line(aes(y = fitted(model2)), colour='red')
+plt2
+```
+
+```{r}
+df3 <- data.frame(
+  x <- unlist(data_train$Attr40),
+  y <- unlist(data_train$Attr46)
+)
+model3 <- lm(y ~ x,df3)
+cor(df3)
+plt3 <- ggplot(df3, aes(x = df3$x, y = df3$y)) + 
+  geom_point(shape = 20) +
+  ggtitle(paste('Correlation=',model3$coefficients[2]))+
+  xlab('Cash Ratio') + 
+  ylab('Quick Ratio')+
+  xlim(-0.02,0.03)+ylim(-0.1,0.2)+
+  geom_line(aes(y = fitted(model3)), colour='red')
+plt3
+```
+
+```{r}
+df4 <- data.frame(
+  x <- unlist(data_train$Attr32),
+  y <- unlist(data_train$Attr52)
+)
+model4 <- lm(y ~ x,df4)
+plt4 <- ggplot(df4, aes(x = df4$x, y = df4$y)) + 
+  geom_point(shape = 20) +
+  ggtitle(paste('Correlation=',model4$coefficients[2]))+
+  xlab('Attr32 = Current Liabilities/COGS') + 
+  ylab('Attr52 = Short-term Liabilities/COGS')+
+  xlim(-0.02,0.03)+ylim(-0.1,0.2)+
+  geom_line(aes(y = fitted(model4)), colour='red')
+plt4
+```
+
+## for filtered features
+
+```{r}
+# select top 10 out of 22 features
+data_select<-data_train[,c(26,34,27,2,60,11,31,5,45,10)]
+# left 12 features: c(56,30,46,29,7,42,3,13,54,16,58,61)
+boxplot(data_select,horizontal=FALSE )
+# qqline(data_select)
+```
+
+```{r}
+# Melt the correlation matrix
+library(reshape2)
+cormat <- round(cor(data_select),2)
+melted_data <- melt(cormat, na.rm = TRUE)
+# Heatmap
+ggplot(data = melted_data, aes(Var2, Var1, fill = value))+
+  geom_tile(color = "white")+
+  scale_fill_gradient2(low = "red", high = "dark blue",mid = "white", midpoint = 0, limit = c(-1,1), space = "Lab", name="Pearson\nCorrelation") +
+  theme_minimal()+
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1))+
+  xlab('Variable')+
+  ylab('Variable')+
+  coord_fixed()
+```
